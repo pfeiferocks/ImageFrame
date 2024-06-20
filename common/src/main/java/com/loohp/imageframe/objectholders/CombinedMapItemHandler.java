@@ -90,6 +90,7 @@ public class CombinedMapItemHandler implements Listener, AutoCloseable {
                 .replace("{CreatorName}", imageMap.getCreatorName())
                 .replace("{CreatorUUID}", imageMap.getCreator().toString())
                 .replace("{TimeCreated}", ImageFrame.dateFormat.format(new Date(imageMap.getCreationTime())))).collect(Collectors.toList()));
+        meta.setCustomModelData(imageMap.getImageIndex());
         itemStack.setItemMeta(meta);
         return NMS.getInstance().withCombinedMapItemInfo(itemStack, new CombinedMapItemInfo(imageMap.getImageIndex()));
     }

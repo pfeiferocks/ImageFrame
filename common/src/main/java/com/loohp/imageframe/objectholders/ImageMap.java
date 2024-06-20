@@ -287,6 +287,7 @@ public abstract class ImageMap {
                     .replace("{CreatorName}", getCreatorName())
                     .replace("{CreatorUUID}", getCreator().toString())
                     .replace("{TimeCreated}", ImageFrame.dateFormat.format(new Date(getCreationTime())))));
+            mapMeta.setCustomModelData(getImageIndex());
             itemStack.setItemMeta(mapMeta);
             maps.add(postCreationFunction.apply(itemStack));
             i++;

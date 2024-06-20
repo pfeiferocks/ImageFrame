@@ -23,7 +23,6 @@
     <build>
         <defaultGoal>clean install</defaultGoal>
         <sourceDirectory>src/main/java</sourceDirectory>
-        <testSourceDirectory>src/test/java</testSourceDirectory>
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
@@ -222,7 +221,7 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>me.carleslc.Simple-YAML</groupId>
+            <groupId>com.github.Carleslc.Simple-YAML</groupId>
             <artifactId>Simple-Yaml</artifactId>
             <version>1.8.1</version>
             <scope>compile</scope>
