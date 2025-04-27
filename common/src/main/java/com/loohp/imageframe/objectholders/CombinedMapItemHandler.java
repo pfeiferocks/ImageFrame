@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,7 +52,6 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -101,12 +100,9 @@ public class CombinedMapItemHandler implements Listener, AutoCloseable {
 
     public void giveCombinedMap(ImageMap imageMap, Collection<? extends Player> players) {
         ItemStack map = getCombinedMap(imageMap);
-        players.forEach(p -> Scheduler.runTask(ImageFrame.plugin, () -> {
-            Map<Integer, ItemStack> result = p.getInventory().addItem(map.clone());
-            for (ItemStack stack : result.values()) {
-                p.getWorld().dropItem(p.getEyeLocation(), stack).setVelocity(new Vector(0, 0, 0));
-            }
-        }, p));
+        for (Player player : players) {
+            PlayerUtils.giveItem(player, map.clone());
+        }
     }
 
     @Override
@@ -278,47 +274,46 @@ public class CombinedMapItemHandler implements Listener, AutoCloseable {
         if (player != null && !entityDamageChecking.add(player)) {
             return;
         }
-        ItemStack itemStack = itemFrame.getItem();
-        if (itemStack == null || !itemStack.getType().equals(Material.FILLED_MAP)) {
-            entityDamageChecking.remove(player);
-            return;
-        }
-        CombinedMapItemInfo mapItemInfo = NMS.getInstance().getCombinedMapItemInfo(itemStack);
-        if (mapItemInfo == null || !mapItemInfo.hasPlacement()) {
-            entityDamageChecking.remove(player);
-            return;
-        }
-        CombinedMapItemInfo.PlacementInfo placement = mapItemInfo.getPlacement();
-        int id = mapItemInfo.getImageMapIndex();
-        float yaw = placement.getYaw();
-        UUID uuid = placement.getUniqueId();
-        ImageMap imageMap = ImageFrame.imageMapManager.getFromImageId(id);
-        if (imageMap == null) {
-            entityDamageChecking.remove(player);
-            return;
-        }
-        ItemFrameSelectionManager.SelectedItemFrameResult selection = findItemFrames(itemFrame, yaw, imageMap.getWidth(), imageMap.getHeight(), item -> {
-            if (item == null || !item.getType().equals(Material.FILLED_MAP)) {
-                return false;
+        try {
+            ItemStack itemStack = itemFrame.getItem();
+            if (itemStack == null || !itemStack.getType().equals(Material.FILLED_MAP)) {
+                return;
             }
-            CombinedMapItemInfo info = NMS.getInstance().getCombinedMapItemInfo(item);
-            if (info == null || !info.hasPlacement()) {
-                return false;
+            CombinedMapItemInfo mapItemInfo = NMS.getInstance().getCombinedMapItemInfo(itemStack);
+            if (mapItemInfo == null || !mapItemInfo.hasPlacement()) {
+                return;
             }
-            return info.getImageMapIndex() == id && info.getPlacement().getUniqueId().equals(uuid);
-        });
-        if (selection == null) {
+            CombinedMapItemInfo.PlacementInfo placement = mapItemInfo.getPlacement();
+            int id = mapItemInfo.getImageMapIndex();
+            float yaw = placement.getYaw();
+            UUID uuid = placement.getUniqueId();
+            ImageMap imageMap = ImageFrame.imageMapManager.getFromImageId(id);
+            if (imageMap == null) {
+                return;
+            }
+            ItemFrameSelectionManager.SelectedItemFrameResult selection = findItemFrames(itemFrame, yaw, imageMap.getWidth(), imageMap.getHeight(), item -> {
+                if (item == null || !item.getType().equals(Material.FILLED_MAP)) {
+                    return false;
+                }
+                CombinedMapItemInfo info = NMS.getInstance().getCombinedMapItemInfo(item);
+                if (info == null || !info.hasPlacement()) {
+                    return false;
+                }
+                return info.getImageMapIndex() == id && info.getPlacement().getUniqueId().equals(uuid);
+            });
+            if (selection == null) {
+                return;
+            }
+            List<ItemFrame> itemFrames = selection.getItemFrames();
+            if (player == null || itemFrames.stream().allMatch(each -> PlayerUtils.isDamageAllowed(player, each))) {
+                itemFrames.forEach(each -> each.setItem(null, false));
+                itemFrame.setItem(getCombinedMap(imageMap), false);
+            } else {
+                player.sendMessage(ImageFrame.messageItemFrameOccupied);
+            }
+        } finally {
             entityDamageChecking.remove(player);
-            return;
         }
-        List<ItemFrame> itemFrames = selection.getItemFrames();
-        if (player == null || itemFrames.stream().allMatch(each -> PlayerUtils.isDamageAllowed(player, each))) {
-            itemFrames.forEach(each -> each.setItem(null, false));
-            itemFrame.setItem(getCombinedMap(imageMap), false);
-        } else {
-            player.sendMessage(ImageFrame.messageItemFrameOccupied);
-        }
-        entityDamageChecking.remove(player);
     }
 
 }

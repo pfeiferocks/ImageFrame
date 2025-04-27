@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ import com.loohp.imageframe.objectholders.ImageMapHitTargetResult;
 import com.loohp.imageframe.objectholders.IntPosition;
 import com.loohp.imageframe.objectholders.MapPacketSentCallback;
 import com.loohp.imageframe.objectholders.MutablePair;
+import net.kyori.adventure.key.Key;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -54,26 +55,39 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.Future;
 
 public class MapUtils {
 
     @SuppressWarnings("deprecation")
     public static final byte PALETTE_TRANSPARENT = MapPalette.TRANSPARENT;
-    @SuppressWarnings("removal")
-    public static final byte PALETTE_WHITE = MapPalette.matchColor(255, 255, 255);
+    public static final byte[] PALETTE_GRAYSCALE = generateGrayScale();
 
     public static final int MAP_WIDTH = 128;
 
     public static final String GIF_CONTENT_TYPE = "image/gif";
     public static final List<BlockFace> CARTESIAN_BLOCK_FACES = Collections.unmodifiableList(Arrays.asList(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN));
+
+    @SuppressWarnings("removal")
+    private static byte[] generateGrayScale() {
+        Set<Byte> bytes = new TreeSet<>();
+        for (int i = 0; i < 256; i++) {
+            bytes.add(MapPalette.matchColor(i, i, i));
+        }
+        byte[] result = new byte[bytes.size()];
+        int i = 0;
+        for (byte b : bytes) {
+            result[i++] = b;
+        }
+        return result;
+    }
 
     public static World getMainWorld() {
         return Bukkit.getWorlds().get(0);
@@ -138,7 +152,11 @@ public class MapUtils {
     }
 
     public static BufferedImage resize(BufferedImage source, int width, int height) {
-        BufferedImage image = new BufferedImage(width * MAP_WIDTH, height * MAP_WIDTH, BufferedImage.TYPE_INT_ARGB);
+        return resize(source, width, height, MAP_WIDTH);
+    }
+
+    public static BufferedImage resize(BufferedImage source, int width, int height, int mapWidth) {
+        BufferedImage image = new BufferedImage(width * mapWidth, height * mapWidth, BufferedImage.TYPE_INT_ARGB);
         Graphics g = image.createGraphics();
         double wRatio = (double) image.getWidth() / (double) source.getWidth();
         double hRatio = (double) image.getHeight() / (double) source.getHeight();
@@ -153,20 +171,24 @@ public class MapUtils {
         return image;
     }
 
-    @SuppressWarnings("SuspiciousNameCombination")
     public static BufferedImage getSubImage(BufferedImage source, int x, int y) {
-        int startX = x * MAP_WIDTH;
-        int startY = y * MAP_WIDTH;
+        return getSubImage(source, x, y, MAP_WIDTH);
+    }
+
+    @SuppressWarnings("SuspiciousNameCombination")
+    public static BufferedImage getSubImage(BufferedImage source, int x, int y, int mapWidth) {
+        int startX = x * mapWidth;
+        int startY = y * mapWidth;
         int width = source.getWidth() - startX;
         int height = source.getHeight() - startY;
-        if (width < MAP_WIDTH || height < MAP_WIDTH) {
-            BufferedImage image = new BufferedImage(MAP_WIDTH, MAP_WIDTH, BufferedImage.TYPE_INT_ARGB);
+        if (width < mapWidth || height < mapWidth) {
+            BufferedImage image = new BufferedImage(mapWidth, mapWidth, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = image.createGraphics();
             g.drawImage(source.getSubimage(startX, startY, width, height), 0, 0, null);
             g.dispose();
             return image;
         }
-        return source.getSubimage(startX, startY, MAP_WIDTH, MAP_WIDTH);
+        return source.getSubimage(startX, startY, mapWidth, mapWidth);
     }
 
     public static boolean areImagesEqual(BufferedImage img1, BufferedImage img2) {
@@ -201,11 +223,14 @@ public class MapUtils {
         if (!mapMeta.hasMapView()) {
             return null;
         }
+        if (mapMeta.hasMapId()) {
+            tryDeleteBlankDataFile(getMainWorld(), mapMeta.getMapId());
+        }
         return mapMeta.getMapView();
     }
 
     public static MapView getPlayerMapView(Player player) {
-        return getItemMapView(player.getEquipment().getItemInHand());
+        return getItemMapView(player.getEquipment().getItemInMainHand());
     }
 
     public static int removeEmptyMaps(Player player, int count, boolean checkGameMode) {
@@ -224,10 +249,6 @@ public class MapUtils {
 
     public static void setColors(MapView mapView, byte[] colors) {
         NMS.getInstance().setColors(mapView, colors);
-    }
-
-    public static Set<Player> getViewers(MapView mapView) {
-        return NMS.getInstance().getViewers(mapView);
     }
 
     public static MapCursorCollection toMapCursorCollection(Collection<MapCursor> mapCursors) {
@@ -388,6 +409,7 @@ public class MapUtils {
                 worldDataNextId = 0;
             }
             int id = Math.max(worldNextId, Math.max(ifNextId, worldDataNextId));
+            tryDeleteBlankDataFile(world, id);
             return NMS.getInstance().getMapOrCreateMissing(world, id);
         });
     }
@@ -397,11 +419,44 @@ public class MapUtils {
     }
 
     public static Future<MapView> getMapOrCreateMissing(World world, int id) {
-        return FutureUtils.callSyncMethod(() -> NMS.getInstance().getMapOrCreateMissing(world, id));
+        return FutureUtils.callSyncMethod(() -> {
+            tryDeleteBlankDataFile(world, id);
+            return NMS.getInstance().getMapOrCreateMissing(world, id);
+        });
     }
 
-    public static MutablePair<byte[], ArrayList<MapCursor>> bukkitRenderMap(MapView mapView, Player player) {
+    public static MutablePair<byte[], List<MapCursor>> bukkitRenderMap(MapView mapView, Player player) {
         return NMS.getInstance().bukkitRenderMap(mapView, player);
+    }
+
+    public static File getWorldDataFolder(World world) {
+        File worldFolder = world.getWorldFolder();
+        World.Environment environment = world.getEnvironment();
+        if (environment.equals(World.Environment.NORMAL)) {
+            return new File(worldFolder, "data");
+        } else if (environment.equals(World.Environment.NETHER)) {
+            return new File(worldFolder, "DIM-1/data");
+        } else if (environment.equals(World.Environment.THE_END)) {
+            return new File(worldFolder, "DIM1/data");
+        } else if (environment.equals(World.Environment.CUSTOM)) {
+            Key namespacedKey = NMS.getInstance().getWorldNamespacedKey(world);
+            return new File(world.getWorldFolder(), namespacedKey.value() + "/data");
+        } else {
+            throw new UnsupportedOperationException("Dimension type " + environment + " of world " + world.getName() + " not supported yet!");
+        }
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    public static void tryDeleteBlankDataFile(World world, int mapId) {
+        if (ImageFrame.tryDeleteBlankMapFiles) {
+            File dataFolder = getWorldDataFolder(world);
+            if (dataFolder.exists() && dataFolder.isDirectory()) {
+                File mapFile = new File(dataFolder, "map_" + mapId + ".dat");
+                if (mapFile.exists() && mapFile.length() <= 0) {
+                    mapFile.delete();
+                }
+            }
+        }
     }
 
 }

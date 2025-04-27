@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ import com.loohp.imageframe.api.events.ImageMapUpdatedEvent;
 import com.loohp.imageframe.utils.FutureUtils;
 import com.loohp.imageframe.utils.HTTPRequestUtils;
 import com.loohp.imageframe.utils.MapUtils;
+import com.loohp.platformscheduler.Scheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -172,11 +173,11 @@ public class URLStaticImageMap extends URLImageMap {
     protected URLStaticImageMap(ImageMapManager manager, int imageIndex, String name, String url, FileLazyMappedBufferedImage[] cachedImages, List<MapView> mapViews, List<Integer> mapIds, List<Map<String, MapCursor>> mapMarkers, int width, int height, DitheringType ditheringType, UUID creator, Map<UUID, ImageMapAccessPermissionType> hasAccess, long creationTime) {
         super(manager, imageIndex, name, url, mapViews, mapIds, mapMarkers, width, height, ditheringType, creator, hasAccess, creationTime);
         this.cachedImages = cachedImages;
-        cacheColors();
+        this.cacheControlTask.loadCacheIfManual();
     }
 
     @Override
-    public void cacheColors() {
+    public void loadColorCache() {
         if (cachedImages == null) {
             return;
         }
@@ -205,7 +206,12 @@ public class URLStaticImageMap extends URLImageMap {
     }
 
     @Override
-    public void clearCachedColors() {
+    public boolean hasColorCached() {
+        return cachedColors != null;
+    }
+
+    @Override
+    public void unloadColorCache() {
         cachedColors = null;
     }
 
@@ -226,7 +232,7 @@ public class URLStaticImageMap extends URLImageMap {
 
     @Override
     public void update(boolean save) throws Exception {
-        BufferedImage image = ImageIO.read(new ByteArrayInputStream(HTTPRequestUtils.download(url)));
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(HTTPRequestUtils.download(url, ImageFrame.maxImageFileSize)));
         if (image == null) {
             throw new RuntimeException("Unable to read or download image, does this url directly links to an image? (" + url + ")");
         }
@@ -237,7 +243,7 @@ public class URLStaticImageMap extends URLImageMap {
                 cachedImages[i++] = FileLazyMappedBufferedImage.fromImage(MapUtils.getSubImage(image, x, y));
             }
         }
-        cacheColors();
+        reloadColorCache();
         Bukkit.getPluginManager().callEvent(new ImageMapUpdatedEvent(this));
         send(getViewers());
         if (save) {
@@ -264,7 +270,7 @@ public class URLStaticImageMap extends URLImageMap {
         }
         json.addProperty("creator", creator.toString());
         JsonObject accessJson = new JsonObject();
-        for (Map.Entry<UUID, ImageMapAccessPermissionType> entry : hasAccess.entrySet()) {
+        for (Map.Entry<UUID, ImageMapAccessPermissionType> entry : accessControl.getPermissions().entrySet()) {
             accessJson.addProperty(entry.getKey().toString(), entry.getValue().name());
         }
         json.add("hasAccess", accessJson);

@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@ import com.google.gson.JsonObject;
 import com.loohp.imageframe.ImageFrame;
 import com.loohp.imageframe.utils.FileUtils;
 import com.loohp.imageframe.utils.MapUtils;
+import com.loohp.platformscheduler.ScheduledTask;
+import com.loohp.platformscheduler.Scheduler;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -52,6 +54,7 @@ import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,9 +79,10 @@ public class ImageMapManager implements AutoCloseable {
     private final AtomicInteger mapIndexCounter;
     private final File dataFolder;
     private final AtomicInteger tickCounter;
-    private final Scheduler.ScheduledTask task;
     private final List<ImageMapRenderEventListener> renderEventListeners;
     private final Set<Integer> deletedMapIds;
+
+    private final ScheduledTask tickCounterTask;
 
     public ImageMapManager(File dataFolder) {
         this.maps = new ConcurrentHashMap<>();
@@ -88,7 +92,8 @@ public class ImageMapManager implements AutoCloseable {
         this.tickCounter = new AtomicInteger(0);
         this.renderEventListeners = new CopyOnWriteArrayList<>();
         this.deletedMapIds = ConcurrentHashMap.newKeySet();
-        this.task = Scheduler.runTaskTimerAsynchronously(ImageFrame.plugin, () -> tickCounter.incrementAndGet(), 0, 1);
+
+        this.tickCounterTask = Scheduler.runTaskTimerAsynchronously(ImageFrame.plugin, () -> tickCounter.incrementAndGet(), 0, 1);
     }
 
     public File getDataFolder() {
@@ -102,7 +107,7 @@ public class ImageMapManager implements AutoCloseable {
     @Override
     public void close() {
         saveDeletedMaps();
-        task.cancel();
+        tickCounterTask.cancel();
     }
 
     public void appendRenderEventListener(ImageMapRenderEventListener listener) {
@@ -137,6 +142,7 @@ public class ImageMapManager implements AutoCloseable {
         maps.put(map.getImageIndex(), map);
         for (MapView mapView : map.getMapViews()) {
             mapsByView.put(mapView, map);
+            deletedMapIds.remove(mapView.getId());
         }
         try {
             map.save();
@@ -147,6 +153,7 @@ public class ImageMapManager implements AutoCloseable {
             }
             throw e;
         }
+        saveDeletedMaps();
     }
 
     public boolean hasMap(int imageIndex) {
@@ -158,6 +165,10 @@ public class ImageMapManager implements AutoCloseable {
     }
 
     public ImageMap getFromMapId(int id) {
+        MapView mapView = Bukkit.getMap(id);
+        if (mapView == null) {
+            return null;
+        }
         return getFromMapView(Bukkit.getMap(id));
     }
 
@@ -295,7 +306,7 @@ public class ImageMapManager implements AutoCloseable {
     }
 
     public void sendAllMaps(Collection<? extends Player> players) {
-        maps.values().forEach(m -> sendAllMaps(players));
+        maps.values().forEach(m -> m.send(players));
     }
 
     public static class DeletedMapRenderer extends MapRenderer {
@@ -311,9 +322,11 @@ public class ImageMapManager implements AutoCloseable {
                 Scheduler.runTaskLater(ImageFrame.plugin, () -> map.removeRenderer(this), 1);
                 return;
             }
+            Random random = new Random(map.getId());
+            byte[] colors = MapUtils.PALETTE_GRAYSCALE;
             for (int y = 0; y < MapUtils.MAP_WIDTH; y++) {
                 for (int x = 0; x < MapUtils.MAP_WIDTH; x++) {
-                    canvas.setPixel(x, y, MapUtils.PALETTE_WHITE);
+                    canvas.setPixel(x, y, colors[random.nextInt(colors.length)]);
                 }
             }
         }

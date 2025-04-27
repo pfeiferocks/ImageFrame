@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2024. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2024. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ package com.loohp.imageframe.nms;
 
 import com.loohp.imageframe.objectholders.CombinedMapItemInfo;
 import com.loohp.imageframe.objectholders.MutablePair;
+import net.kyori.adventure.key.Key;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -29,8 +30,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.map.MapCursor;
 import org.bukkit.map.MapView;
 
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 public abstract class NMSWrapper {
@@ -40,7 +41,9 @@ public abstract class NMSWrapper {
 
     public abstract void setColors(MapView mapView, byte[] colors);
 
-    public abstract Set<Player> getViewers(MapView mapView);
+    public abstract Collection<Player> getViewers(MapView mapView);
+
+    public abstract boolean hasViewers(MapView mapView);
 
     public abstract Object toNMSMapIcon(MapCursor mapCursor);
 
@@ -52,7 +55,7 @@ public abstract class NMSWrapper {
 
     public abstract MapView getMapOrCreateMissing(World world, int id);
 
-    public abstract MutablePair<byte[], ArrayList<MapCursor>> bukkitRenderMap(MapView mapView, Player player);
+    public abstract MutablePair<byte[], List<MapCursor>> bukkitRenderMap(MapView mapView, Player player);
 
     public abstract Set<Player> getEntityTrackers(Entity entity);
 
@@ -60,10 +63,18 @@ public abstract class NMSWrapper {
 
     public abstract Object createItemFrameItemChangePacket(int entityId, ItemStack itemStack);
 
+    public abstract Object createEntityFlagsPacket(Entity entity, Boolean invisible, Boolean glowing);
+
     public abstract void sendPacket(Player player, Object packet);
 
     public abstract CombinedMapItemInfo getCombinedMapItemInfo(ItemStack itemStack);
 
     public abstract ItemStack withCombinedMapItemInfo(ItemStack itemStack, CombinedMapItemInfo combinedMapItemInfo);
+
+    public abstract ItemStack withInvisibleItemFrameMeta(ItemStack itemStack);
+
+    public abstract List<ItemStack> giveItems(Player player, List<ItemStack> itemStacks);
+
+    public abstract Key getWorldNamespacedKey(World world);
 
 }

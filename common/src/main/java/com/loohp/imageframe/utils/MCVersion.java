@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 
 public enum MCVersion {
 
+    V1_21_5("1.21.5", "1_21_R4", 31),
     V1_21_4("1.21.4", "1_21_R3", 30),
     V1_21_3("1.21.3", "1_21_R2", 29),
     V1_21_2("1.21.2", "1_21_R2", 28),

@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ import com.loohp.imageframe.utils.FutureUtils;
 import com.loohp.imageframe.utils.GifReader;
 import com.loohp.imageframe.utils.HTTPRequestUtils;
 import com.loohp.imageframe.utils.MapUtils;
+import com.loohp.platformscheduler.Scheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -182,11 +183,11 @@ public class URLAnimatedImageMap extends URLImageMap {
         this.cachedImages = cachedImages;
         this.pausedAt = pausedAt;
         this.tickOffset = tickOffset;
-        cacheColors();
+        this.cacheControlTask.loadCacheIfManual();
     }
 
     @Override
-    public void cacheColors() {
+    public void loadColorCache() {
         if (cachedImages == null) {
             return;
         }
@@ -246,7 +247,12 @@ public class URLAnimatedImageMap extends URLImageMap {
     }
 
     @Override
-    public void clearCachedColors() {
+    public boolean hasColorCached() {
+        return cachedColors != null;
+    }
+
+    @Override
+    public void unloadColorCache() {
         cachedColors = null;
     }
 
@@ -254,7 +260,7 @@ public class URLAnimatedImageMap extends URLImageMap {
     public void update(boolean save) throws Exception {
         List<GifReader.ImageFrame> frames;
         try {
-            frames = GifReader.readGif(HTTPRequestUtils.getInputStream(url)).get();
+            frames = GifReader.readGif(HTTPRequestUtils.getInputStream(url), ImageFrame.maxImageFileSize).get();
         } catch (Exception e) {
             throw new RuntimeException("Unable to read or download animated gif, does this url directly links to the gif? (" + url + ")", e);
         }
@@ -291,7 +297,7 @@ public class URLAnimatedImageMap extends URLImageMap {
             }
             index++;
         }
-        cacheColors();
+        reloadColorCache();
         Bukkit.getPluginManager().callEvent(new ImageMapUpdatedEvent(this));
         if (save) {
             save();
@@ -304,7 +310,7 @@ public class URLAnimatedImageMap extends URLImageMap {
     }
 
     @Override
-    public int getCurrentPositionInSequence() {
+    public int getCurrentPositionInSequenceWithOffset() {
         if (isAnimationPaused()) {
             return pausedAt;
         }
@@ -324,7 +330,7 @@ public class URLAnimatedImageMap extends URLImageMap {
     @Override
     public synchronized void setAnimationPause(boolean pause) throws Exception {
         if (pausedAt < 0 && pause) {
-            pausedAt = getCurrentPositionInSequence();
+            pausedAt = getCurrentPositionInSequenceWithOffset();
             save();
         } else if (pausedAt >= 0 && !pause) {
             setCurrentPositionInSequence(pausedAt);
@@ -411,7 +417,7 @@ public class URLAnimatedImageMap extends URLImageMap {
 
     @Override
     public Set<Integer> getFakeMapIds() {
-        return fakeMapIdsSet;
+        return fakeMapIdsSet == null ? Collections.emptySet() : fakeMapIdsSet;
     }
 
     @Override
@@ -455,7 +461,7 @@ public class URLAnimatedImageMap extends URLImageMap {
         json.addProperty("pausedAt", pausedAt);
         json.addProperty("tickOffset", tickOffset);
         JsonObject accessJson = new JsonObject();
-        for (Map.Entry<UUID, ImageMapAccessPermissionType> entry : hasAccess.entrySet()) {
+        for (Map.Entry<UUID, ImageMapAccessPermissionType> entry : accessControl.getPermissions().entrySet()) {
             accessJson.addProperty(entry.getKey().toString(), entry.getValue().name());
         }
         json.add("hasAccess", accessJson);
@@ -518,7 +524,7 @@ public class URLAnimatedImageMap extends URLImageMap {
 
         @Override
         public MutablePair<byte[], Collection<MapCursor>> renderMap(MapView mapView, Player player) {
-            return renderMap(mapView, parent.getCurrentPositionInSequence(), player);
+            return renderMap(mapView, parent.getCurrentPositionInSequenceWithOffset(), player);
         }
     }
 

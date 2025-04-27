@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2023. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2023. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,7 @@
 package com.loohp.imageframe.api.events;
 
 import com.loohp.imageframe.objectholders.ImageMap;
-import com.loohp.imageframe.objectholders.Scheduler;
-import org.bukkit.Bukkit;
+import com.loohp.platformscheduler.Scheduler;
 import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 
@@ -37,7 +36,7 @@ public class ImageMapUpdatedEvent extends Event {
     private final ImageMap imageMap;
 
     public ImageMapUpdatedEvent(ImageMap imageMap) {
-        super(Scheduler.FOLIA || !Bukkit.isPrimaryThread());
+        super(!Scheduler.isPrimaryThread());
         this.imageMap = imageMap;
     }
 

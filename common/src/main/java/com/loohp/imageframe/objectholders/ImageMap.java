@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2022. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2022. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,11 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.loohp.imageframe.ImageFrame;
+import com.loohp.imageframe.nms.NMS;
 import com.loohp.imageframe.utils.MapUtils;
+import com.loohp.imageframe.utils.PlayerUtils;
+import com.loohp.imageframe.utils.StringUtils;
+import com.loohp.platformscheduler.Scheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Rotation;
@@ -36,8 +40,8 @@ import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapCursor;
 import org.bukkit.map.MapRenderer;
 import org.bukkit.map.MapView;
-import org.bukkit.util.Vector;
 
+import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -47,18 +51,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public abstract class ImageMap {
 
@@ -87,9 +89,10 @@ public abstract class ImageMap {
     protected final int height;
     protected DitheringType ditheringType;
     protected UUID creator;
-    protected Map<UUID, ImageMapAccessPermissionType> hasAccess;
+    protected ImageMapAccessControl accessControl;
     protected final long creationTime;
 
+    protected final ImageMapCacheControlTask cacheControlTask;
     private boolean isValid;
 
     public ImageMap(ImageMapManager manager, int imageIndex, String name, List<MapView> mapViews, List<Integer> mapIds, List<Map<String, MapCursor>> mapMarkers, int width, int height, DitheringType ditheringType, UUID creator, Map<UUID, ImageMapAccessPermissionType> hasAccess, long creationTime) {
@@ -104,7 +107,7 @@ public abstract class ImageMap {
         }
         this.manager = manager;
         this.imageIndex = imageIndex;
-        this.name = name;
+        this.name = StringUtils.sanitize(name);
         this.mapViews = Collections.unmodifiableList(mapViews);
         this.mapIds = Collections.unmodifiableList(mapIds);
         this.mapMarkers = Collections.unmodifiableList(mapMarkers);
@@ -112,21 +115,34 @@ public abstract class ImageMap {
         this.height = height;
         this.ditheringType = ditheringType;
         this.creator = creator;
-        this.hasAccess = new ConcurrentHashMap<>(hasAccess);
+        this.accessControl = new ImageMapAccessControl(this, hasAccess);
         this.creationTime = creationTime;
 
+        this.cacheControlTask = ImageFrame.cacheControlMode.newInstance(this);
         this.isValid = true;
 
-        this.hasAccess.remove(creator);
+        this.accessControl.setPermissionWithoutSave(creator, null);
     }
 
     public ImageMapManager getManager() {
         return manager;
     }
 
-    public abstract void cacheColors();
+    protected abstract void loadColorCache();
 
-    public abstract void clearCachedColors();
+    protected void reloadColorCache() {
+        if (hasColorCached()) {
+            loadColorCache();
+        }
+    }
+
+    protected abstract boolean hasColorCached();
+
+    protected abstract void unloadColorCache();
+
+    public BufferedImage getHighResImage(int mapId) {
+        return null;
+    }
 
     public int getImageIndex() {
         return imageIndex;
@@ -137,7 +153,7 @@ public abstract class ImageMap {
     }
 
     public void rename(String name) throws Exception {
-        this.name = name;
+        this.name = StringUtils.sanitize(name);
         save();
     }
 
@@ -147,6 +163,7 @@ public abstract class ImageMap {
 
     protected void markInvalid() {
         this.isValid = false;
+        this.cacheControlTask.close();
     }
 
     public boolean isValid() {
@@ -165,7 +182,7 @@ public abstract class ImageMap {
         return false;
     }
 
-    public int getCurrentPositionInSequence() {
+    public int getCurrentPositionInSequenceWithOffset() {
         return 0;
     }
 
@@ -183,6 +200,10 @@ public abstract class ImageMap {
 
     public void setAnimationPlaybackTime(double seconds) throws Exception {
         //do nothing
+    }
+
+    public int getCurrentPositionInSequence() {
+        return getCurrentPositionInSequenceWithOffset() % getSequenceLength();
     }
 
     public int getSequenceLength() {
@@ -309,12 +330,9 @@ public abstract class ImageMap {
 
     public void giveMap(Collection<? extends Player> players, int x, int y, String mapNameFormat, Function<ItemStack, ItemStack> postCreationFunction) {
         ItemStack map = getMap(x, y, mapNameFormat, postCreationFunction);
-        players.forEach(p -> Scheduler.runTask(ImageFrame.plugin, () -> {
-            Map<Integer, ItemStack> result = p.getInventory().addItem(map.clone());
-            for (ItemStack stack : result.values()) {
-                p.getWorld().dropItem(p.getEyeLocation(), stack).setVelocity(new Vector(0, 0, 0));
-            }
-        }, p));
+        for (Player player : players) {
+            PlayerUtils.giveItem(player, map.clone());
+        }
     }
 
     public void giveMaps(Player player, String mapNameFormat) {
@@ -332,12 +350,9 @@ public abstract class ImageMap {
     public void giveMaps(Collection<? extends Player> players, String mapNameFormat, Function<ItemStack, ItemStack> postCreationFunction) {
         List<ItemStack> maps = getMaps(mapNameFormat, postCreationFunction);
         for (ItemStack map : maps) {
-            players.forEach(p -> Scheduler.runTask(ImageFrame.plugin, () -> {
-                HashMap<Integer, ItemStack> result = p.getInventory().addItem(map.clone());
-                for (ItemStack stack : result.values()) {
-                    p.getWorld().dropItem(p.getEyeLocation(), stack).setVelocity(new Vector(0, 0, 0));
-                }
-            }, p));
+            for (Player player : players) {
+                PlayerUtils.giveItem(player, map.clone());
+            }
         }
     }
 
@@ -369,14 +384,11 @@ public abstract class ImageMap {
     }
 
     public Set<Player> getViewers() {
-        Set<Player> players = new HashSet<>();
-        for (MapView mapView : mapViews) {
-            Set<Player> set = MapUtils.getViewers(mapView);
-            if (set != null) {
-                players.addAll(set);
-            }
-        }
-        return players;
+        return mapViews.stream().flatMap(m -> NMS.getInstance().getViewers(m).stream()).collect(Collectors.toSet());
+    }
+
+    public boolean hasViewers() {
+        return mapViews.stream().anyMatch(m -> NMS.getInstance().hasViewers(m));
     }
 
     public UUID getCreator() {
@@ -385,45 +397,12 @@ public abstract class ImageMap {
 
     public void changeCreator(UUID creator) throws Exception {
         this.creator = creator;
-        hasAccess.remove(creator);
+        this.accessControl.setPermissionWithoutSave(creator, null);
         save();
     }
 
-    public ImageMapAccessPermissionType getPermission(UUID player) {
-        if (player.equals(creator)) {
-            return ImageMapAccessPermissionType.ALL;
-        }
-        return hasAccess.get(player);
-    }
-
-    public Map<UUID, ImageMapAccessPermissionType> getPermissions() {
-        return Collections.unmodifiableMap(hasAccess);
-    }
-
-    public boolean hasPermission(UUID player, ImageMapAccessPermissionType permissionType) {
-        if (permissionType == null) {
-            return true;
-        }
-        if (player.equals(creator)) {
-            return true;
-        }
-        ImageMapAccessPermissionType type = hasAccess.get(player);
-        if (type == null) {
-            return false;
-        }
-        return type.containsPermission(permissionType);
-    }
-
-    public void setPermission(UUID player, ImageMapAccessPermissionType permissionType) throws Exception {
-        if (player.equals(creator)) {
-            return;
-        }
-        if (permissionType == null) {
-            hasAccess.remove(player);
-        } else {
-            hasAccess.put(player, permissionType);
-        }
-        save();
+    public ImageMapAccessControl getAccessControl() {
+        return accessControl;
     }
 
     public String getCreatorName() {
@@ -481,7 +460,7 @@ public abstract class ImageMap {
 
         @Override
         public void render(MapView mapView, MapCanvas canvas, Player player) {
-            MutablePair<byte[], Collection<MapCursor>> renderData = renderMap(mapView, player);
+            MutablePair<byte[], Collection<MapCursor>> renderData = renderMap(mapView, 0, player);
             manager.callRenderEventListener(manager, imageMap, mapView, player, renderData);
             byte[] colors = renderData.getFirst();
             if (colors != null) {

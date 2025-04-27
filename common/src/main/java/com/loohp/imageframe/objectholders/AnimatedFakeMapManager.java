@@ -1,8 +1,8 @@
 /*
  * This file is part of ImageFrame.
  *
- * Copyright (C) 2023. LoohpJames <jamesloohp@gmail.com>
- * Copyright (C) 2023. Contributors
+ * Copyright (C) 2025. LoohpJames <jamesloohp@gmail.com>
+ * Copyright (C) 2025. Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,10 @@ import com.loohp.imageframe.nms.NMS;
 import com.loohp.imageframe.utils.FakeItemUtils;
 import com.loohp.imageframe.utils.MapUtils;
 import com.loohp.imageframe.utils.ModernEventsUtils;
+import com.loohp.platformscheduler.Scheduler;
+import com.loohp.platformscheduler.platform.folia.FoliaScheduler;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -99,7 +102,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
                 try {
                     if (itemFrame.isValid()) {
                         Set<Player> trackedPlayers;
-                        if (Scheduler.FOLIA) {
+                        if (Scheduler.getPlatform() instanceof FoliaScheduler) {
                             try {
                                 //noinspection deprecation
                                 trackedPlayers = itemFrame.getTrackedPlayers();
@@ -185,7 +188,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
                 continue;
             }
             int index = animationData.getIndex();
-            int currentPosition = imageMap.getCurrentPositionInSequence();
+            int currentPosition = imageMap.getCurrentPositionInSequenceWithOffset();
             int mapId = imageMap.getAnimationFakeMapId(currentPosition, index, imageMap.isAnimationPaused());
             if (mapId < 0) {
                 continue;
@@ -307,9 +310,12 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onChunkLoad(ChunkLoadEvent event) {
-        for (Entity entity : event.getChunk().getEntities()) {
-            handleEntity(entity);
-        }
+        Chunk chunk = event.getChunk();
+        Scheduler.executeOrScheduleSync(ImageFrame.plugin, () -> {
+            for (Entity entity : chunk.getEntities()) {
+                handleEntity(entity);
+            }
+        }, chunk);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
