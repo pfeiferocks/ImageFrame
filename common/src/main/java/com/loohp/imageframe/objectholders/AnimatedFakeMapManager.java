@@ -93,6 +93,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
     }
 
     private Map<UUID, CompletableFuture<ItemFrameInfo>> collectItemFramesInfo(boolean async) {
+        boolean isFolia = Scheduler.getPlatform() instanceof FoliaScheduler;
         Map<UUID, CompletableFuture<ItemFrameInfo>> futures = new HashMap<>();
         for (Map.Entry<UUID, TrackedItemFrameData> entry : itemFrames.entrySet()) {
             UUID uuid = entry.getKey();
@@ -102,7 +103,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
                 try {
                     if (itemFrame.isValid()) {
                         Set<Player> trackedPlayers;
-                        if (Scheduler.getPlatform() instanceof FoliaScheduler) {
+                        if (isFolia) {
                             try {
                                 //noinspection deprecation
                                 trackedPlayers = itemFrame.getTrackedPlayers();
@@ -120,7 +121,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
                     future.completeExceptionally(e);
                 }
             };
-            if (async) {
+            if (async && !isFolia) {
                 task.run();
             } else {
                 Scheduler.executeOrScheduleSync(ImageFrame.plugin, task, itemFrame);
@@ -183,6 +184,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
                 }
             }
             ImageMap imageMap = animationData.getImageMap();
+
             if (!imageMap.requiresAnimationService()) {
                 data.setAnimationData(AnimationData.EMPTY);
                 continue;
@@ -195,8 +197,7 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
             }
             Set<Player> requiresSending = new HashSet<>();
             Set<Player> needReset = new HashSet<>();
-            Iterator<Player> itr = players.iterator();
-            while (itr.hasNext()) {
+            for (Iterator<Player> itr = players.iterator(); itr.hasNext();) {
                 Player player = itr.next();
                 MapMarkerEditManager.MapMarkerEditData edit = ImageFrame.mapMarkerEditManager.getActiveEditing(player);
                 if (edit != null && Objects.equals(edit.getImageMap(), imageMap)) {
@@ -208,8 +209,11 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
                 Set<Integer> pendingKnownIds = pendingKnownMapIds.get(player);
                 if (knownIds != null && !knownIds.contains(mapId)) {
                     if (pendingKnownIds != null && !pendingKnownIds.contains(mapId)) {
-                        pendingKnownIds.addAll(imageMap.getFakeMapIds());
-                        requiresSending.add(player);
+                        Set<Integer> fakeMapIds = imageMap.getFakeMapIds();
+                        if (fakeMapIds != null) {
+                            pendingKnownIds.addAll(fakeMapIds);
+                            requiresSending.add(player);
+                        }
                     }
                     itr.remove();
                 }
@@ -368,11 +372,13 @@ public class AnimatedFakeMapManager implements Listener, Runnable {
         }
         Scheduler.runTaskAsynchronously(ImageFrame.plugin, () -> {
             Set<Integer> ids = imageMap.getFakeMapIds();
-            for (Set<Integer> knownIds : knownMapIds.values()) {
-                knownIds.removeAll(ids);
-            }
-            for (Set<Integer> pendingKnownIds : pendingKnownMapIds.values()) {
-                pendingKnownIds.removeAll(ids);
+            if (ids != null) {
+                for (Set<Integer> knownIds : knownMapIds.values()) {
+                    knownIds.removeAll(ids);
+                }
+                for (Set<Integer> pendingKnownIds : pendingKnownMapIds.values()) {
+                    pendingKnownIds.removeAll(ids);
+                }
             }
         });
     }
